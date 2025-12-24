@@ -47,11 +47,35 @@ export const appConfig = {
     // Working directory in sandbox
     workingDirectory: '/home/user/app',
   },
+
+  // Devbox Sandbox Configuration
+  devbox: {
+    // Sandbox timeout in minutes
+    timeoutMinutes: 30,
+
+    // Convert to milliseconds for Devbox API
+    get timeoutMs() {
+      return this.timeoutMinutes * 60 * 1000;
+    },
+
+    // Development server port (Devbox uses 5173 for Vite)
+    vitePort: 5173,
+
+    // Time to wait for Vite dev server to be ready (in milliseconds)
+    viteStartupDelay: 10000,
+
+    // Working directory in sandbox
+    workingDirectory: '/workspace',
+
+    // Default CPU and memory resources
+    defaultCpu: 1,
+    defaultMemory: 1,
+  },
   
   // AI Model Configuration
   ai: {
     // Default AI model
-    defaultModel: 'google/gemini-3-flash',
+    defaultModel: 'openai/gpt-5',
     
     // Available models
     availableModels: [
