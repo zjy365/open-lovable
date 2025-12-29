@@ -1,4 +1,4 @@
-export default function FirecrawlIcon({ className = "w-5 h-5" }: { className?: string }) {
+export default function SealosCodeIcon({ className = "w-5 h-5" }: { className?: string }) {
   return (
     <svg 
       className={className}

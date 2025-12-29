@@ -1,6 +1,6 @@
 import { HTMLAttributes } from "react";
 
-export default function FirecrawlIcon({
+export default function SealosCodeIcon({
   fill = "var(--heat-100)",
   innerFillColor = "var(--background-base)",
   ...attrs

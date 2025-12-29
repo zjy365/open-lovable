@@ -1,4 +1,4 @@
-export default function FirecrawlLogo() {
+export default function SealosCodeLogo() {
   return (
     <svg
       fill="none"

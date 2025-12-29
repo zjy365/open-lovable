@@ -256,7 +256,7 @@ export default function HomePage() {
                 href="#"
                 onClick={(e) => e.preventDefault()}
               >
-                Powered by Firecrawl.
+                Powered by SealosCode.
               </Link>
             </div>
           </div>
