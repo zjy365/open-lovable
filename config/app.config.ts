@@ -64,8 +64,8 @@ export const appConfig = {
     // Time to wait for Vite dev server to be ready (in milliseconds)
     viteStartupDelay: 10000,
 
-    // Working directory in sandbox
-    workingDirectory: '/workspace',
+    // Working directory in sandbox (devbox uses /home/devbox/project by default)
+    workingDirectory: '/home/devbox/project',
 
     // Default CPU and memory resources
     defaultCpu: 1,

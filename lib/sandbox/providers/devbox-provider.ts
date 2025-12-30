@@ -50,8 +50,8 @@ export class DevboxProvider extends SandboxProvider {
 
       // Create devbox
       const devboxName = `sandbox-${Date.now()}`;
-      const cpu = this.config.devbox?.cpu || appConfig.devbox.defaultCpu;
-      const memory = this.config.devbox?.memory || appConfig.devbox.defaultMemory;
+      const cpu = 2; // Fixed: 2 cores
+      const memory = 4; // Fixed: 4 GB
 
       this.devbox = await this.sdk.createDevbox({
         name: devboxName,
@@ -68,25 +68,49 @@ export class DevboxProvider extends SandboxProvider {
       await this.devbox.start();
       console.log('[DevboxProvider] Devbox started');
 
-      // Wait for Running status
+      // Wait for Running status with error checking
       let attempts = 0;
       const maxAttempts = 30;
       while (attempts < maxAttempts) {
         const currentDevbox = await this.sdk.getDevbox(devboxName);
+
         if (currentDevbox.status === 'Running') {
           console.log('[DevboxProvider] Devbox is Running');
           break;
         }
+
+        // Check for failure states
+        if (currentDevbox.status === 'Failed' || currentDevbox.status === 'Error') {
+          throw new Error(`Devbox failed to start: ${currentDevbox.status}`);
+        }
+
         await new Promise(resolve => setTimeout(resolve, 2000));
         attempts++;
       }
 
+      if (attempts >= maxAttempts) {
+        throw new Error('Devbox failed to reach Running status within timeout');
+      }
+
       const sandboxId = this.devbox.name || devboxName;
 
-      // Get preview URL for port 3000 (or configured port)
+      // Configure npm registry (from full-lifecycle.ts)
+      // npm config is global, no need for cwd parameter
+      try {
+        await this.devbox.execSync({
+          command: 'npm',
+          args: ['config', 'set', 'registry', 'https://registry.npmmirror.com'],
+          env: { HOME: '/home/devbox' },
+        });
+        console.log('[DevboxProvider] npm registry configured');
+      } catch (error) {
+        console.warn('[DevboxProvider] Failed to configure npm registry:', error);
+      }
+
+      // Get preview URL for port 5173 (Vite default port)
       let sandboxUrl = '';
       try {
-        const previewLink = await this.devbox.getPreviewLink(3000);
+        const previewLink = await this.devbox.getPreviewLink(5173);
         sandboxUrl = previewLink.url;
         console.log('[DevboxProvider] Preview URL:', sandboxUrl);
       } catch (error) {
@@ -110,75 +134,44 @@ export class DevboxProvider extends SandboxProvider {
     }
   }
 
-  async runCommand(command: string): Promise<CommandResult> {
+  async runCommand(command: string, timeout?: number): Promise<CommandResult> {
     if (!this.devbox) {
       throw new Error('No active sandbox');
     }
 
     try {
-      // Parse command into cmd and args
-      const parts = command.split(' ');
-      const cmd = parts[0];
-      const args = parts.slice(1);
+      // For complex commands with &&, ||, pipes, etc., use shell
+      // Otherwise, parse into cmd and args
+      const needsShell = /[&|><;`$()]/.test(command);
 
-      // Check if devbox has exec or runCommand method
-      // Based on common patterns, try exec first, then runCommand
-      let result: any;
-      
-      if (typeof this.devbox.exec === 'function') {
-        result = await this.devbox.exec({
+      let result;
+      if (needsShell) {
+        // Use shell for complex commands
+        result = await this.devbox.execSync({
+          command: 'sh',
+          args: ['-c', command],
+          cwd: appConfig.devbox.workingDirectory,
+          timeout: timeout || 300000, // Default 5 minutes for shell commands
+        });
+      } else {
+        // Simple command: parse into cmd and args
+        const parts = command.split(' ');
+        const cmd = parts[0];
+        const args = parts.slice(1);
+
+        result = await this.devbox.execSync({
           command: cmd,
           args: args,
           cwd: appConfig.devbox.workingDirectory,
+          timeout: timeout || 120000, // Default 2 minutes for simple commands
         });
-      } else if (typeof this.devbox.runCommand === 'function') {
-        result = await this.devbox.runCommand({
-          cmd: cmd,
-          args: args,
-          cwd: appConfig.devbox.workingDirectory,
-        });
-      } else {
-        // Fallback: try to execute via shell
-        const fullCommand = `${cmd} ${args.join(' ')}`;
-        if (typeof this.devbox.exec === 'function') {
-          result = await this.devbox.exec(fullCommand, {
-            cwd: appConfig.devbox.workingDirectory,
-          });
-        } else {
-          throw new Error('Devbox does not support command execution. exec or runCommand method not found.');
-        }
-      }
-
-      // Handle result - adapt based on actual SDK response format
-      let stdout = '';
-      let stderr = '';
-      let exitCode = 0;
-
-      if (result) {
-        if (typeof result.stdout === 'string') {
-          stdout = result.stdout;
-        } else if (result.output) {
-          stdout = result.output;
-        }
-
-        if (typeof result.stderr === 'string') {
-          stderr = result.stderr;
-        } else if (result.error) {
-          stderr = result.error;
-        }
-
-        if (typeof result.exitCode === 'number') {
-          exitCode = result.exitCode;
-        } else if (result.code !== undefined) {
-          exitCode = result.code;
-        }
       }
 
       return {
-        stdout,
-        stderr,
-        exitCode,
-        success: exitCode === 0,
+        stdout: result.stdout || '',
+        stderr: result.stderr || '',
+        exitCode: result.exitCode || 0,
+        success: (result.exitCode || 0) === 0,
       };
     } catch (error: any) {
       return {
@@ -196,7 +189,20 @@ export class DevboxProvider extends SandboxProvider {
     }
 
     const fullPath = path.startsWith('/') ? path : `${appConfig.devbox.workingDirectory}/${path}`;
-    
+
+    // Ensure parent directory exists before writing file
+    const dirPath = fullPath.substring(0, fullPath.lastIndexOf('/'));
+    if (dirPath) {
+      try {
+        await this.devbox.execSync({
+          command: 'mkdir',
+          args: ['-p', dirPath],
+        });
+      } catch (error) {
+        console.warn(`[DevboxProvider] Failed to create directory ${dirPath}:`, error);
+      }
+    }
+
     await this.devbox.writeFile(fullPath, content);
     this.existingFiles.add(path);
   }
@@ -223,8 +229,10 @@ export class DevboxProvider extends SandboxProvider {
       throw new Error('No active sandbox');
     }
 
-    const files = await this.devbox.listFiles(directory);
-    
+    // SDK returns { files: string[] } (from full-lifecycle.ts line 300)
+    const response = await this.devbox.listFiles(directory);
+    const files = response.files || [];
+
     // Filter out node_modules, .git, etc.
     return files.filter((file: string) => {
       const normalizedPath = file.replace(directory, '').replace(/^\//, '');
@@ -243,12 +251,12 @@ export class DevboxProvider extends SandboxProvider {
 
     const packageList = packages.join(' ');
     const flags = appConfig.packages.useLegacyPeerDeps ? '--legacy-peer-deps' : '';
-    
-    const command = flags 
+
+    const command = flags
       ? `npm install ${flags} ${packageList}`
       : `npm install ${packageList}`;
 
-    const result = await this.runCommand(command);
+    const result = await this.runCommand(command, 600000); // 10 minutes timeout for npm install
 
     // Restart Vite if configured
     if (appConfig.packages.autoRestartVite && result.success) {
@@ -263,6 +271,17 @@ export class DevboxProvider extends SandboxProvider {
       throw new Error('No active sandbox');
     }
 
+    // Ensure working directory exists first
+    try {
+      await this.devbox.execSync({
+        command: 'mkdir',
+        args: ['-p', appConfig.devbox.workingDirectory],
+      });
+      console.log('[DevboxProvider] Working directory created:', appConfig.devbox.workingDirectory);
+    } catch (error) {
+      console.warn('[DevboxProvider] Failed to create working directory:', error);
+    }
+
     // Create directory structure
     await this.runCommand(`mkdir -p ${appConfig.devbox.workingDirectory}/src`);
 
@@ -272,7 +291,7 @@ export class DevboxProvider extends SandboxProvider {
       version: "1.0.0",
       type: "module",
       scripts: {
-        dev: "vite --host",
+        dev: "vite --host 0.0.0.0",
         build: "vite build",
         preview: "vite preview"
       },
@@ -301,11 +320,7 @@ export default defineConfig({
     host: '0.0.0.0',
     port: 5173,
     strictPort: true,
-    allowedHosts: [
-      '.vercel.run',
-      '.e2b.dev',
-      'localhost'
-    ],
+    allowedHosts: true, // Allow all hosts for devbox compatibility
     hmr: false
   }
 })`;
@@ -396,24 +411,35 @@ body {
 }`;
     
     await this.writeFile('src/index.css', indexCss);
-    
-    // Install dependencies
+
+    console.log('[DevboxProvider] All files created, starting npm install...');
+
+    // Install dependencies (with longer timeout for npm install)
     try {
-      const installResult = await this.runCommand(`cd ${appConfig.devbox.workingDirectory} && npm install`);
-      
+      console.log('[DevboxProvider] Running: npm install (this may take a while...)');
+      const installResult = await this.runCommand(
+        `cd ${appConfig.devbox.workingDirectory} && npm install`,
+        600000 // 10 minutes timeout for npm install
+      );
+
       if (installResult.exitCode !== 0) {
         console.warn('[DevboxProvider] npm install had issues:', installResult.stderr);
+      } else {
+        console.log('[DevboxProvider] npm install completed successfully');
       }
     } catch (error: any) {
       console.error('[DevboxProvider] npm install error:', error);
       console.warn('[DevboxProvider] Continuing without npm install - packages may need to be installed manually');
     }
-    
+
+    console.log('[DevboxProvider] Starting Vite dev server...');
+
     // Start Vite dev server
     // Kill any existing Vite processes
     await this.runCommand(`pkill -f vite || true`);
-    
+
     // Start Vite in background
+    console.log('[DevboxProvider] Running: npm run dev (background)');
     await this.runCommand(`cd ${appConfig.devbox.workingDirectory} && nohup npm run dev > /tmp/vite.log 2>&1 &`);
     
     // Wait for Vite to be ready
@@ -480,6 +506,135 @@ body {
 
   isAlive(): boolean {
     return !!this.devbox && !!this.sdk;
+  }
+
+  // Additional helper methods based on full-lifecycle.ts example
+
+  /**
+   * Clone a git repository into the devbox
+   * @param url - Repository URL
+   * @param targetDir - Target directory path
+   */
+  async cloneRepository(url: string, targetDir: string): Promise<void> {
+    if (!this.devbox) {
+      throw new Error('No active sandbox');
+    }
+
+    // Clean up directory first to avoid clone conflicts
+    try {
+      await this.devbox.execSync({
+        command: 'rm',
+        args: ['-rf', targetDir],
+      });
+    } catch {
+      // Ignore errors if directory doesn't exist
+    }
+
+    // Clone repository using git.clone API
+    await this.devbox.git.clone({
+      url,
+      targetDir,
+    });
+  }
+
+  /**
+   * Start a long-running process (e.g., dev server)
+   * @param command - Command to execute
+   * @param args - Command arguments
+   * @param cwd - Working directory
+   * @returns Process ID and PID
+   */
+  async startLongRunningProcess(
+    command: string,
+    args: string[],
+    cwd?: string
+  ): Promise<{ processId: string; pid: number }> {
+    if (!this.devbox) {
+      throw new Error('No active sandbox');
+    }
+
+    const process = await this.devbox.executeCommand({
+      command,
+      args,
+      cwd: cwd || appConfig.devbox.workingDirectory,
+      timeout: 600, // 10 minutes
+    });
+
+    return {
+      processId: process.processId,
+      pid: process.pid,
+    };
+  }
+
+  /**
+   * Get process status
+   * @param processId - Process ID
+   * @returns Process status
+   */
+  async getProcessStatus(processId: string): Promise<{ processStatus: string }> {
+    if (!this.devbox) {
+      throw new Error('No active sandbox');
+    }
+
+    return await this.devbox.getProcessStatus(processId);
+  }
+
+  /**
+   * Get process logs
+   * @param processId - Process ID
+   * @returns Process logs
+   */
+  async getProcessLogs(processId: string): Promise<string[]> {
+    if (!this.devbox) {
+      throw new Error('No active sandbox');
+    }
+
+    const response = await this.devbox.getProcessLogs(processId);
+    return response.logs || [];
+  }
+
+  /**
+   * Get list of open ports
+   * @returns List of port numbers
+   */
+  async getPorts(): Promise<number[]> {
+    if (!this.devbox) {
+      throw new Error('No active sandbox');
+    }
+
+    const response = await this.devbox.getPorts();
+    return response.ports || [];
+  }
+
+  /**
+   * Get preview URL for a specific port
+   * @param port - Port number
+   * @returns Preview URL
+   */
+  async getPreviewLink(port: number): Promise<string> {
+    if (!this.devbox) {
+      throw new Error('No active sandbox');
+    }
+
+    const previewLink = await this.devbox.getPreviewLink(port);
+    return previewLink.url;
+  }
+
+  /**
+   * Configure npm registry (useful for faster package installation)
+   * @param registry - Registry URL (default: https://registry.npmmirror.com)
+   */
+  async configureNpmRegistry(registry: string = 'https://registry.npmmirror.com'): Promise<void> {
+    if (!this.devbox) {
+      throw new Error('No active sandbox');
+    }
+
+    await this.devbox.execSync({
+      command: 'npm',
+      args: ['config', 'set', 'registry', registry],
+      cwd: appConfig.devbox.workingDirectory,
+    });
+    console.log('[DevboxProvider] npm registry configured:', registry);
   }
 }
 
