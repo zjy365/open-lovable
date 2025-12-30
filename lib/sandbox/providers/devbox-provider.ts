@@ -34,15 +34,18 @@ export class DevboxProvider extends SandboxProvider {
 
       // Initialize SDK
       const kubeconfig = this.config.devbox?.kubeconfig || process.env.KUBECONFIG;
-      const baseUrl = this.config.devbox?.baseUrl || process.env.DEVBOX_API_URL;
 
-      if (!kubeconfig || !baseUrl) {
-        throw new Error('KUBECONFIG and DEVBOX_API_URL environment variables are required');
+      if (!kubeconfig) {
+        throw new Error('KUBECONFIG environment variable is required');
       }
 
       this.sdk = new DevboxSDK({
         kubeconfig,
-        baseUrl,
+        http: {
+          timeout: 300000,
+          retries: 3,
+          rejectUnauthorized: false,
+        },
       });
 
       // Create devbox
@@ -59,18 +62,37 @@ export class DevboxProvider extends SandboxProvider {
         },
       });
 
+      console.log('[DevboxProvider] Devbox created:', this.devbox.name);
+
+      // Start the devbox
+      await this.devbox.start();
+      console.log('[DevboxProvider] Devbox started');
+
+      // Wait for Running status
+      let attempts = 0;
+      const maxAttempts = 30;
+      while (attempts < maxAttempts) {
+        const currentDevbox = await this.sdk.getDevbox(devboxName);
+        if (currentDevbox.status === 'Running') {
+          console.log('[DevboxProvider] Devbox is Running');
+          break;
+        }
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        attempts++;
+      }
+
       const sandboxId = this.devbox.name || devboxName;
-      
-      // Get devbox URL - assuming devbox has a url or domain property
-      // If not available, we'll need to construct it or get it from the SDK
+
+      // Get preview URL for port 3000 (or configured port)
       let sandboxUrl = '';
-      if (this.devbox.url) {
-        sandboxUrl = this.devbox.url;
-      } else if (this.devbox.domain) {
-        sandboxUrl = `https://${this.devbox.domain}`;
-      } else {
-        // Fallback: construct URL from baseUrl and sandboxId
-        sandboxUrl = `${baseUrl.replace('/api', '')}/${sandboxId}`;
+      try {
+        const previewLink = await this.devbox.getPreviewLink(3000);
+        sandboxUrl = previewLink.url;
+        console.log('[DevboxProvider] Preview URL:', sandboxUrl);
+      } catch (error) {
+        console.warn('[DevboxProvider] Failed to get preview URL:', error);
+        // Fallback: use devbox name
+        sandboxUrl = `devbox://${sandboxId}`;
       }
 
       this.sandboxInfo = {

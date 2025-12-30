@@ -39,7 +39,7 @@ export class SandboxFactory {
                (!!process.env.VERCEL_TOKEN && !!process.env.VERCEL_TEAM_ID && !!process.env.VERCEL_PROJECT_ID);
       
       case 'devbox':
-        return !!(process.env.KUBECONFIG && process.env.DEVBOX_API_URL);
+        return !!process.env.KUBECONFIG;
       
       default:
         return false;
