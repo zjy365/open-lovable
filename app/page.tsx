@@ -219,7 +219,7 @@ export default function HomePage() {
       <div className="min-h-screen bg-background-base">
         {/* Header/Navigation Section */}
         <HeaderDropdownWrapper />
-
+ 
         <div className="sticky top-0 left-0 w-full z-[101] bg-background-base header">
           <div className="absolute top-0 cmw-container border-x border-border-faint h-full pointer-events-none" />
           <div className="h-1 bg-border-faint w-full left-0 -bottom-1 absolute" />

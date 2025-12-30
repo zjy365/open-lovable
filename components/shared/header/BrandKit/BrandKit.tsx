@@ -6,7 +6,7 @@ import { AnimatePresence, motion } from "motion/react";
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import SealosCodeIcon from "@/components/shared/sealos-code-icon/sealos-code-icon";
+import AnimatedSealosLogo from "@/components/shared/animated-sealos-logo/animated-sealos-logo";
 import Logo from "@/components/shared/header/_svg/Logo";
 import { useHeaderContext } from "@/components/shared/header/HeaderContext";
 import { cn } from "@/utils/cn";
@@ -45,8 +45,10 @@ export default function HeaderBrandKit() {
           }
         }}
       >
-        <SealosCodeIcon className="size-28 -top-2 relative" />
-        <Logo />
+        <AnimatedSealosLogo className="size-28 -top-2 relative" />
+        <span className="text-xl ml-2">
+        SealosCode
+        </span>
       </Link>
 
       <AnimatePresence initial={false} mode="popLayout">
