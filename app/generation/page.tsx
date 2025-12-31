@@ -8,6 +8,7 @@ import HeroInput from '@/components/HeroInput';
 import SidebarInput from '@/components/app/generation/SidebarInput';
 import HeaderBrandKit from '@/components/shared/header/BrandKit/BrandKit';
 import { HeaderProvider } from '@/components/shared/header/HeaderContext';
+import { useSealos } from '@/contexts/sealos-context';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 // Import icons from centralized module to avoid Turbopack chunk issues
@@ -61,6 +62,9 @@ interface ScrapeData {
 }
 
 function AISandboxPage() {
+  // Get kubeconfig from Sealos SDK
+  const { kubeconfig } = useSealos();
+
   const [sandboxData, setSandboxData] = useState<SandboxData | null>(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState({ text: 'Not connected', active: false });
@@ -548,7 +552,7 @@ function AISandboxPage() {
       const response = await fetch('/api/create-ai-sandbox-v2', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({})
+        body: JSON.stringify({ kubeconfig })
       });
       
       const data = await response.json();
