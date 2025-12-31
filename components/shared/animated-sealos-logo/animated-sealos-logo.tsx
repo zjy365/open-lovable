@@ -1,12 +1,12 @@
 "use client";
 
 import { motion } from "motion/react";
-import { HTMLAttributes } from "react";
 
 export default function AnimatedSealosLogo({
   className = "",
-  ...attrs
-}: HTMLAttributes<HTMLOrSVGElement>) {
+}: {
+  className?: string;
+}) {
   return (
     <motion.div
       className={`relative inline-block ${className}`}
@@ -29,7 +29,6 @@ export default function AnimatedSealosLogo({
           },
         },
       }}
-      {...attrs}
     >
       {/* Glow effect on hover */}
       <motion.div
