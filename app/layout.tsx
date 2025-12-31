@@ -15,7 +15,7 @@ const geistMono = localFont({
 });
 
 export const metadata: Metadata = {
-  title: "Open Lovable v3",
+  title: "Sealos Code Beta",
   description: "Re-imagine any website in seconds with AI-powered website builder.",
 };
 

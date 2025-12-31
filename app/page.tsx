@@ -256,7 +256,7 @@ export default function HomePage() {
                 href="#"
                 onClick={(e) => e.preventDefault()}
               >
-                Powered by SealosCode.
+                Powered by Sealos Devbox.
               </Link>
             </div>
           </div>

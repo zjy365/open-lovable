@@ -80,10 +80,10 @@ export const appConfig = {
     // Available models
     availableModels: [
       'openai/gpt-5',
-      'moonshotai/kimi-k2-instruct-0905',
-      'anthropic/claude-sonnet-4-20250514',
-      'google/gemini-3-flash',
-      'google/gemini-3-pro-preview'
+      // 'moonshotai/kimi-k2-instruct-0905',
+      // 'anthropic/claude-sonnet-4-20250514',
+      // 'google/gemini-3-flash',
+      // 'google/gemini-3-pro-preview'
     ],
     
     // Model display names
