@@ -12,14 +12,24 @@ declare global {
   var sandboxState: SandboxState;
 }
 
-export async function POST() {
+export async function POST(request: Request) {
   try {
     console.log('[create-ai-sandbox-v2] Creating sandbox...');
-    
+
+    // Parse request body for kubeconfig
+    let kubeconfig: string | undefined;
+    try {
+      const body = await request.json();
+      kubeconfig = body.kubeconfig;
+      console.log('[create-ai-sandbox-v2] Received kubeconfig from client:', !!kubeconfig);
+    } catch {
+      console.log('[create-ai-sandbox-v2] No request body or kubeconfig provided, using environment variables');
+    }
+
     // Clean up all existing sandboxes
     console.log('[create-ai-sandbox-v2] Cleaning up existing sandboxes...');
     await sandboxManager.terminateAll();
-    
+
     // Also clean up legacy global state
     if (global.activeSandboxProvider) {
       try {
@@ -29,7 +39,7 @@ export async function POST() {
       }
       global.activeSandboxProvider = null;
     }
-    
+
     // Clear existing files tracking
     if (global.existingFiles) {
       global.existingFiles.clear();
@@ -37,8 +47,14 @@ export async function POST() {
       global.existingFiles = new Set<string>();
     }
 
-    // Create new sandbox using factory
-    const provider = SandboxFactory.create();
+    // Create new sandbox using factory with kubeconfig if provided
+    const config = kubeconfig ? {
+      devbox: {
+        kubeconfig
+      }
+    } : undefined;
+
+    const provider = SandboxFactory.create(undefined, config);
     const sandboxInfo = await provider.createSandbox();
     
     console.log('[create-ai-sandbox-v2] Setting up Vite React app...');
