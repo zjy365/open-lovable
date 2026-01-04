@@ -2979,8 +2979,23 @@ Focus on building something NEW, minimal, and functional that perfectly matches 
             }
           }
 
-          prompt = `I want to recreate the ${url} website as a complete React application based on the scraped content below.
+          prompt = `I want to recreate the ${url} website as a complete React application.
 
+${urlScreenshot ? `🎨 VISUAL REFERENCE:
+A screenshot of the website has been provided. STUDY IT CAREFULLY to understand:
+- The exact layout and visual hierarchy
+- Color scheme and design aesthetics
+- Typography choices (font sizes, weights, styles)
+- Spacing and padding between elements
+- Component arrangements and positioning
+- Visual effects (shadows, borders, gradients)
+- Interactive elements styling (buttons, forms, links)
+
+YOUR TASK: Recreate this EXACT visual design in React + Tailwind CSS.
+The result should look IDENTICAL to the screenshot.
+` : ''}
+
+SCRAPED CONTENT (for text and structure):
 ${JSON.stringify(scrapeData, null, 2)}
 
 ${filteredContext ? `ADDITIONAL CONTEXT/REQUIREMENTS FROM USER:
@@ -2988,10 +3003,17 @@ ${filteredContext}
 
 Please incorporate these requirements into the design and implementation.` : ''}
 
-IMPORTANT INSTRUCTIONS:
+CRITICAL DESIGN REQUIREMENTS:
+${urlScreenshot ? `- MATCH THE SCREENSHOT EXACTLY - this is your primary reference
+- Use the EXACT color palette from the screenshot
+- Match the EXACT spacing, padding, and margins
+- Replicate the EXACT typography (sizes, weights, line heights)
+- Copy the EXACT layout and component positioning
+- Recreate ANY visual effects you see (shadows, borders, gradients, etc.)
+- The final result should be VISUALLY INDISTINGUISHABLE from the screenshot` : '- Study the scraped content to understand the site structure'}
 - Create a COMPLETE, working React application
 - Implement ALL sections and features from the original site
-- Use Tailwind CSS for all styling (no custom CSS files)
+- Use Tailwind CSS with custom colors matching the screenshot
 - Make it responsive and modern
 - Ensure all text content matches the original
 - Create proper component structure
@@ -2999,7 +3021,7 @@ IMPORTANT INSTRUCTIONS:
 - Create ALL components that you reference in imports
 ${filteredContext ? '- Apply the user\'s context/theme requirements throughout the application' : ''}
 
-Focus on the key sections and content, making it clean and modern.`;
+${urlScreenshot ? 'Focus on PIXEL-PERFECT recreation of the visual design from the screenshot.' : 'Focus on the key sections and content, making it clean and modern.'}`;
         }
 
         setGenerationProgress(prev => ({
@@ -3021,9 +3043,10 @@ Focus on the key sections and content, making it clean and modern.`;
         const aiResponse = await fetch('/api/generate-ai-code-stream', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ 
+          body: JSON.stringify({
             prompt,
             model: aiModel,
+            screenshot: urlScreenshot || null, // Pass screenshot for visual reference
             context: {
               sandboxId: sandboxData?.sandboxId,
               structure: structureContent,

@@ -368,7 +368,7 @@ export default {
     
     await this.writeFile('index.html', indexHtml);
     
-    // Create src/main.jsx
+    // Create src/main.jsx - CRITICAL: Must import index.css for Tailwind to work!
     const mainJsx = `import React from 'react'
 import ReactDOM from 'react-dom/client'
 import App from './App.jsx'

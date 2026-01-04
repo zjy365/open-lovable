@@ -95,7 +95,7 @@ declare global {
 
 export async function POST(request: NextRequest) {
   try {
-    const { prompt, model = 'openai/gpt-oss-20b', context, isEdit = false } = await request.json();
+    const { prompt, model = 'openai/gpt-oss-20b', context, isEdit = false, screenshot = null } = await request.json();
     
     console.log('[generate-ai-code-stream] Received request:');
     console.log('[generate-ai-code-stream] - prompt:', prompt);
@@ -628,7 +628,14 @@ When recreating/cloning a website, you MUST include:
 ${isEdit ? `CRITICAL: THIS IS AN EDIT TO AN EXISTING APPLICATION
 
 YOU MUST FOLLOW THESE EDIT RULES:
-0. NEVER create tailwind.config.js, vite.config.js, package.json, or any other config files - they already exist!
+0. ⛔ NEVER MODIFY THESE CORE FILES - THEY ARE AUTO-GENERATED:
+   - src/main.jsx (entry point with CSS import)
+   - src/index.css (Tailwind directives)
+   - tailwind.config.js
+   - vite.config.js
+   - postcss.config.js
+   - package.json
+   - index.html
 1. DO NOT regenerate the entire application
 2. DO NOT create files that already exist (like App.jsx, index.css, tailwind.config.js)
 3. ONLY edit the EXACT files needed for the requested change - NO MORE, NO LESS
@@ -827,7 +834,16 @@ CRITICAL: When asked to create a React app or components:
 - ALWAYS CREATE EVERY COMPONENT that you import - no placeholders
 - ALWAYS IMPLEMENT COMPLETE FUNCTIONALITY - don't leave TODOs unless explicitly asked
 - If you're recreating a website, implement ALL sections and features completely
-- NEVER create tailwind.config.js - it's already configured in the template
+
+⛔ NEVER CREATE THESE FILES - THEY ARE AUTO-GENERATED:
+- src/main.jsx (already has correct setup with CSS import)
+- src/index.css (already has @tailwind directives)
+- tailwind.config.js (already configured)
+- vite.config.js (already configured)
+- postcss.config.js (already configured)
+- package.json (already configured)
+- index.html (already configured)
+
 - ALWAYS include a Navigation/Header component (Nav.jsx or Header.jsx) - websites need navigation!
 
 REQUIRED COMPONENTS for website clones:
@@ -1261,12 +1277,19 @@ MORPH FAST APPLY MODE (EDIT-ONLY):
         console.log(`[generate-ai-code-stream] AI Gateway enabled: ${isUsingAIGateway}`);
         console.log(`[generate-ai-code-stream] Model string: ${model}`);
 
+        // Check if screenshot is provided and model supports vision
+        const hasScreenshot = Boolean(screenshot);
+        const supportsVision = isAnthropic || isOpenAI || isGoogle; // Claude 3, GPT-4V, Gemini support vision
+
+        console.log(`[generate-ai-code-stream] Screenshot provided: ${hasScreenshot}`);
+        console.log(`[generate-ai-code-stream] Model supports vision: ${supportsVision}`);
+
         // Make streaming API call with appropriate provider
         const streamOptions: any = {
           model: modelProvider(actualModel),
           messages: [
-            { 
-              role: 'system', 
+            {
+              role: 'system',
               content: systemPrompt + `
 
 🚨 CRITICAL CODE GENERATION RULES - VIOLATION = FAILURE 🚨:
@@ -1303,9 +1326,45 @@ Examples of CORRECT CODE (ALWAYS DO THIS):
 
 REMEMBER: It's better to generate fewer COMPLETE files than many INCOMPLETE files.`
             },
-            { 
-              role: 'user', 
-              content: fullPrompt + `
+            {
+              role: 'user',
+              content: hasScreenshot && supportsVision
+                ? [
+                    {
+                      type: 'image_url',
+                      image_url: {
+                        url: screenshot,
+                        detail: 'high' // Request high-detail analysis for better accuracy
+                      }
+                    },
+                    {
+                      type: 'text',
+                      text: fullPrompt + `
+
+🎨 SCREENSHOT PROVIDED ABOVE - STUDY IT CAREFULLY!
+Your PRIMARY task is to recreate the EXACT visual design from the screenshot.
+- Match colors, spacing, typography, and layout EXACTLY
+- The final result should be VISUALLY INDISTINGUISHABLE from the screenshot
+- Use the screenshot as your reference, not your imagination
+
+CRITICAL: You MUST complete EVERY file you start. If you write:
+<file path="src/components/Hero.jsx">
+
+You MUST include the closing </file> tag and ALL the code in between.
+
+NEVER write partial code like:
+<h1>Build and deploy on the AI Cloud.</h1>
+<p>Some text...</p>  ❌ WRONG
+
+ALWAYS write complete code:
+<h1>Build and deploy on the AI Cloud.</h1>
+<p>Some text here with full content</p>  ✅ CORRECT
+
+If you're running out of space, generate FEWER files but make them COMPLETE.
+It's better to have 3 complete files than 10 incomplete files.`
+                    }
+                  ]
+                : fullPrompt + `
 
 CRITICAL: You MUST complete EVERY file you start. If you write:
 <file path="src/components/Hero.jsx">
